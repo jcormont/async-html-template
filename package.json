@@ -1,0 +1,31 @@
+{
+  "name": "async-html-template",
+  "version": "0.1.0",
+  "description": "Asynchronous HTML Template Engine",
+  "main": "dist/index.js",
+  "typings": "typings/index.d.ts",
+  "engines": {
+    "node": ">=8"
+  },
+  "scripts": {
+    "build": "tsc -p src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://jcormont@github.com/jcormont/async-html-template.git"
+  },
+  "author": "Jelmer Cormont",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jcormont/async-html-template/issues"
+  },
+  "homepage": "https://github.com/jcormont/async-html-template#readme",
+  "devDependencies": {
+    "@types/html-minifier": "^1.1.30",
+    "@types/node": "^8.0.46",
+    "typescript": "^2.5.3"
+  },
+  "dependencies": {
+    "html-minifier": "^3.5.6"
+  }
+}
