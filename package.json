@@ -21,11 +21,11 @@
   },
   "homepage": "https://github.com/jcormont/async-html-template#readme",
   "devDependencies": {
-    "@types/html-minifier": "^1.1.30",
     "@types/node": "^8.0.46",
     "typescript": "^2.5.3"
   },
   "dependencies": {
+    "@types/html-minifier": "^1.1.30",
     "html-minifier": "^3.5.6"
   }
 }
