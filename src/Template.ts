@@ -84,8 +84,10 @@ export class Template {
         // start with empty _$out variable, then add all content and scripts
         let code = `let _$out = "";`;
         let src = await this._srcP;
-        let parts = src.split(/(\<\/?\s*(?:script|template)(?:\s[^\>]*)?\>)/);
-        let nesting: string[] = [], closeLevels: number[] = [];
+        let parts = src.split(/(\<\/?\s*(?:script|template)(?:\s(?:[^\>\"]|\"[^\"]*\")*)?\>)/);
+        let nesting: string[] = [], closeCode: string[] = [];
+        let definedInner: string[] = [];
+        let callTempVarN = 0;
         let escOutput = (s: string) => s.replace(/([\\$`])/g, "\\$1");
         while (parts.length) {
             let p = parts.shift()!;
@@ -119,17 +121,18 @@ export class Template {
                         throw new Error("Unexpected </template> on line " + line);
                     }
                     nesting.pop();
-                    for (let b = closeLevels.pop()!; b > 0; b--) code += "}";
+                    code += closeCode.pop();
                     continue;
                 }
 
                 // increase nesting level, look for attributes
                 nesting.push(p);
-                closeLevels.push(0);
+                closeCode.push("");
                 let regex = /(\s+|[a-z]+\s*=\s*\"[^\"]*\")/;
                 let parts = p.split(regex).map(q => q.trim()).slice(1);
                 let selfClosing = (parts.pop() === "/>");
                 let partialPath = "", partialContext;
+                let callExpr: string | undefined;
                 let getAttr = (s: string, noBraces?: boolean) => {
                     let attr = s.slice(0, -1).replace(/^[^\"]*\"/, "");
                     return (!noBraces && /^{{((?:[^}]|}[^}])+)}}$/.test(attr)) ?
@@ -143,23 +146,67 @@ export class Template {
                         case "if":
                         case "for":
                         case "while":
-                            closeLevels[closeLevels.length - 1]++;
+                            closeCode.push("}" + closeCode.pop());
                             code += attrName + " (" + getAttr(q).trim() + ") {";
                             break;
                         case "html":
                             code += "_$out += (" + getAttr(q).trim() + ");";
                             break;
+                        case "use":
+                            callExpr = getAttr(q).trim();
+                            break;
                         case "context":
                             partialContext = getAttr(q).trim();
                             break;
                         case "partial":
+                        case "wrap":
                             partialPath = getAttr(q, true).trim();
+                            break;
+                        case "define":
+                            let fnName = getAttr(q, true).trim();
+                            if (!/^[a-zA-Z_]\w*$/.test(fnName))
+                                throw new Error("Invalid function name: " + fnName);
+                            definedInner.push(fnName);
+                            code += `async function ${fnName}(context) { let _$out = "";` +
+                                "with(context) {";
+                            closeCode.push("} return _$out; };" + closeCode.pop());
                             break;
                         default:
                             let line = code.split(/\n\r|\r\n|\n|\r/).length;
                             throw new Error("Unexpected: " + q + " at line " + line);
                     }
                 }
+
+                // add code for call expression, if any
+                if (callExpr) {
+                    let callFn = "_$f" + callTempVarN++;
+                    if (selfClosing) {
+                        if (!partialContext) {
+                            // add empty content property to copy of context
+                            partialContext = `Object.assign({content: ""}, context)`;
+                        }
+
+                        // add function output directly
+                        code += `let ${callFn} = (${callExpr});` +
+                            `_$out += (typeof ${callFn} === "function") ? ` +
+                            `await ${callFn}(${partialContext}) : "";`;
+                    }
+                    else {
+                        // pass content if no context is given
+                        if (!partialContext) {
+                            partialContext = `Object.assign({content: _$out}, context)`;
+                        }
+
+                        // wrap in function and add partial output in the end
+                        code += `_$out += await (async ()=>{ let _$out = "";`;
+                        closeCode.push(`let ${callFn} = (${callExpr});` +
+                            `return (typeof ${callFn} === "function") ? ` +
+                            `await ${callFn}(${partialContext}) : ""; })();` +
+                            closeCode.pop());
+                    }
+                }
+
+                // add code for inclusion of partial, if any
                 if (partialPath) {
                     // check if current file has a name in the first place
                     if (!this._fileName) {
@@ -182,15 +229,38 @@ export class Template {
                         partials[fullPath] = partial;
                         partial._compiledP = partial._compileAsync(partials);
                     }
-                    if (!partialContext) partialContext = "Object.assign({}, context)";
-                    code += "_$out += await _$partials[" + JSON.stringify(fullPath) +
-                        "].renderAsync(" + partialContext + ");";
+                    if (selfClosing) {
+                        // use a copy of the context if no context is given
+                        if (!partialContext) {
+                            partialContext = `Object.assign({content: ""}, context)`;
+                        }
+
+                        // add partial output directly
+                        code += "_$out += await _$partials[" +
+                            JSON.stringify(fullPath) +
+                            "].renderAsync(" + partialContext + ");";
+                    }
+                    else {
+                        // pass content and all defined functions if no context is given
+                        if (!partialContext) {
+                            partialContext = "{" +
+                                definedInner.map(name => name + ",").join("") +
+                                "content: _$out}";
+                        }
+
+                        // wrap in function and add partial output in the end
+                        code += `_$out += await (async ()=>{ let _$out = "";`;
+                        closeCode.push("return await _$partials[" +
+                            JSON.stringify(fullPath) +
+                            "].renderAsync(" + partialContext + ")})();" +
+                            closeCode.pop());
+                    }
                 }
 
                 // reduce nesting level again if tag was self-closing
                 if (selfClosing) {
                     nesting.pop();
-                    for (let b = closeLevels.pop()!; b > 0; b--) code += "}";
+                    code += closeCode.pop();
                 }
                 continue;
             }
