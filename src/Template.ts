@@ -179,24 +179,20 @@ export class Template {
 
                 // add code for call expression, if any
                 if (callExpr) {
+                    // pass content if no context is given
+                    if (!partialContext) {
+                        partialContext = "Object.assign({}, context, " +
+                        `{content: ${ selfClosing ? '""' : "_$out" }})`;
+                    }
+                    
                     let callFn = "_$f" + callTempVarN++;
                     if (selfClosing) {
-                        if (!partialContext) {
-                            // add empty content property to copy of context
-                            partialContext = `Object.assign({content: ""}, context)`;
-                        }
-
                         // add function output directly
                         code += `let ${callFn} = (${callExpr});` +
                             `_$out += (typeof ${callFn} === "function") ? ` +
                             `await ${callFn}(${partialContext}) : "";`;
                     }
                     else {
-                        // pass content if no context is given
-                        if (!partialContext) {
-                            partialContext = `Object.assign({content: _$out}, context)`;
-                        }
-
                         // wrap in function and add partial output in the end
                         code += `_$out += await (async ()=>{ let _$out = "";`;
                         closeCode.push(`let ${callFn} = (${callExpr});` +
@@ -229,25 +225,21 @@ export class Template {
                         partials[fullPath] = partial;
                         partial._compiledP = partial._compileAsync(partials);
                     }
-                    if (selfClosing) {
-                        // use a copy of the context if no context is given
-                        if (!partialContext) {
-                            partialContext = `Object.assign({content: ""}, context)`;
-                        }
 
+                    // pass content and all defined functions if no context is given
+                    if (!partialContext) {
+                        partialContext = "Object.assign({}, context, { " +
+                            definedInner.map(name => name + ", ").join("") +
+                            `content: ${ selfClosing ? '""' : "_$out" } })`;
+                    }
+                    
+                    if (selfClosing) {
                         // add partial output directly
                         code += "_$out += await _$partials[" +
                             JSON.stringify(fullPath) +
                             "].renderAsync(" + partialContext + ");";
                     }
                     else {
-                        // pass content and all defined functions if no context is given
-                        if (!partialContext) {
-                            partialContext = "{" +
-                                definedInner.map(name => name + ",").join("") +
-                                "content: _$out}";
-                        }
-
                         // wrap in function and add partial output in the end
                         code += `_$out += await (async ()=>{ let _$out = "";`;
                         closeCode.push("return await _$partials[" +
