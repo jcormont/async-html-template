@@ -28,7 +28,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
 
 // helper function to escape HTML's special characters
 const _toHtml = (s: string) => String(s).replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
 
 // template cache used by Template.fromFile (NOT for partials)
 const _fileTemplateCache: { [fileName: string]: Template } = {};
