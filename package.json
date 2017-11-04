@@ -1,6 +1,6 @@
 {
   "name": "async-html-template",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Asynchronous HTML Template Engine",
   "main": "dist/index.js",
   "typings": "typings/index.d.ts",
